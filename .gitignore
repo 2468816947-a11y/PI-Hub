@@ -1,0 +1,17 @@
+# IDE 配置
+.idea/
+*.iml
+.vscode/
+
+# Claude 配置
+.claude/
+
+# Java 编译产物
+target/
+*.class
+*.jar
+
+# 日志和临时文件
+*.log
+.DS_Store
+Thumbs.db
