@@ -1,0 +1,40 @@
+# =====================================================================
+# 无人机/机器狗仿真器配置模板(宿主机 Java 进程, 直接连接 Docker 暴露端口)
+# 启动示例:
+#   java -jar device-simulator.jar --spring.config.location=file:application-simulator.yml
+# =====================================================================
+spring:
+  application:
+    name: patrol-device-simulator
+
+  kafka:
+    # 宿主机访问 Docker 内 Kafka 的暴露端口(advertised 地址即 localhost:9092)
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: 1
+      retries: 3
+    consumer:
+      group-id: simulator-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+  data:
+    mongodb:
+      uri: mongodb://patrol:patrol123@localhost:27017/patrol?authSource=patrol
+
+simulator:
+  drone-count: 6                  # 无人机台数
+  robot-dog-count: 4              # 机器狗台数(共 10 台, 与架构文档 §9 一致)
+  heartbeat-interval-ms: 5000     # 心跳周期 5s
+  telemetry-interval-ms: 2000     # 遥测上报间隔
+  topics:
+    register: patrol.device.register
+    heartbeat: patrol.device.heartbeat
+    status: patrol.device.status
+    drone-image: patrol.drone.image
+    dog-thermal: patrol.dog.thermal
+    dog-sensor: patrol.dog.sensor
+    task-result: patrol.task.result
+    task-command: patrol.task.command

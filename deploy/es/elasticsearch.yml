@@ -1,0 +1,22 @@
+# =====================================================================
+# Elasticsearch 8.11 单节点核心配置(开发环境)
+# 挂载位置: /usr/share/elasticsearch/config/elasticsearch.yml
+# 堆内存由容器环境变量 ES_JAVA_OPTS 控制(-Xms512m -Xmx512m)
+# =====================================================================
+cluster.name: patrol-es
+node.name: es-node-1
+
+# 单节点模式(免选主、免投票)
+discovery.type: single-node
+
+network.host: 0.0.0.0
+http.port: 9200
+
+# 开发环境关闭安全认证(Kibana/后端免密直连; 生产环境必须开启并设置密码)
+xpack.security.enabled: false
+# 关闭机器学习功能, 节省内存
+xpack.ml.enabled: false
+
+# 数据目录(挂载宿主卷, 容器重建不丢数据)
+path.data: /usr/share/elasticsearch/data
+path.logs: /usr/share/elasticsearch/logs

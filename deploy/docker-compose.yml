@@ -1,0 +1,310 @@
+# =====================================================================
+# 电力场站设备巡检数据集成平台 —— 单机 Docker 多容器模拟分布式集群
+#
+# 常用命令:
+#   仅启动中间件(后端源码未就绪时): docker compose up -d kafka mongodb elasticsearch kibana hdfs-namenode hdfs-datanode
+#   全套启动(含后端双实例):          docker compose up -d --build
+#   停止(保留数据卷):                docker compose down
+#   彻底清理(删除全部数据, 慎用):    docker compose down -v
+# =====================================================================
+
+name: patrol-platform
+
+networks:
+  patrol-net:
+    name: patrol-net
+    driver: bridge
+
+volumes:
+  kafka-data:
+  mongo-data:
+  es-data:
+  hdfs-namenode-data:
+  hdfs-datanode-data:
+
+services:
+
+  # ===================== 1. Kafka (KRaft 模式, 免 Zookeeper) =====================
+  kafka:
+    image: bitnami/kafka:3.6
+    container_name: kafka
+    hostname: kafka
+    restart: always
+    mem_limit: 1g
+    ports:
+      # 宿主机 9092 -> 容器内 EXTERNAL 监听 9094(仿真器等宿主机进程使用)
+      - "9092:9094"
+    environment:
+      # ---- KRaft 模式(单节点同时承担 broker + controller) ----
+      - KAFKA_ENABLE_KRAFT=yes
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_PROCESS_ROLES=broker,controller
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      # ---- 监听器: 容器内(kafka:9092) / 宿主机(localhost:9092) / 控制器(:9093) ----
+      - "KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094"
+      - "KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://localhost:9092"
+      - "KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT"
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      # ---- 单节点: 内部 Topic 副本因子必须为 1 ----
+      - KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR=1
+      # ---- 资源与 Topic 策略(与架构文档 §5 一致) ----
+      - "KAFKA_HEAP_OPTS=-Xms256m -Xmx512m"
+      - KAFKA_CFG_LOG_RETENTION_HOURS=24
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      # 启动即创建 8 个业务 Topic(名称:分区数:副本数)
+      - KAFKA_CREATE_TOPICS=patrol.device.register:3:1,patrol.device.heartbeat:3:1,patrol.device.status:3:1,patrol.drone.image:3:1,patrol.dog.thermal:3:1,patrol.dog.sensor:3:1,patrol.task.result:3:1,patrol.task.command:3:1
+    volumes:
+      - kafka-data:/bitnami/kafka
+    networks:
+      - patrol-net
+    healthcheck:
+      test: ["CMD", "kafka-topics.sh", "--bootstrap-server", "127.0.0.1:9092", "--list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+
+  # ===================== 2. MongoDB =====================
+  mongodb:
+    image: mongo:6.0
+    container_name: mongodb
+    hostname: mongodb
+    restart: always
+    mem_limit: 512m
+    command: ["mongod", "--auth", "--wiredTigerCacheSizeGB", "0.25"]
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: patrol-admin-2026
+      MONGO_INITDB_DATABASE: patrol
+    volumes:
+      - mongo-data:/data/db
+      - ./mongo/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    networks:
+      - patrol-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "mongodb://admin:patrol-admin-2026@127.0.0.1:27017/admin", "--eval", "db.adminCommand('ping').ok"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ===================== 3. Elasticsearch 8.x (单节点) =====================
+  # 可选: 安装 IK 中文分词插件(架构文档 §6.3 索引用到 ik_max_word),
+  #       将下方 image 注释掉, 改用 build 段(Dockerfile 见 es/Dockerfile.ik)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    # build:
+    #   context: ./es
+    #   dockerfile: Dockerfile.ik
+    container_name: elasticsearch
+    hostname: elasticsearch
+    restart: always
+    mem_limit: 1g
+    stop_grace_period: 60s
+    ports:
+      - "9200:9200"
+    environment:
+      # 堆内存严格限制 512m(单机内存有限, 必须同时保持 mem_limit 大于堆内存)
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+      - ./es/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    networks:
+      - patrol-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9200/_cluster/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+
+  # ===================== 4. Kibana =====================
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: kibana
+    hostname: kibana
+    restart: always
+    mem_limit: 768m
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - I18N_LOCALE=zh-CN
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - patrol-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5601/api/status"]
+      interval: 20s
+      timeout: 10s
+      retries: 12
+      start_period: 90s
+
+  # ===================== 5. HDFS NameNode (WebHDFS 开启) =====================
+  hdfs-namenode:
+    image: apache/hadoop:3.3.6
+    container_name: namenode
+    hostname: namenode
+    restart: always
+    mem_limit: 1g
+    ports:
+      - "9870:9870"   # Web UI + WebHDFS REST
+      - "8020:8020"   # RPC
+    # 首次启动自动 format(数据目录不存在时), 之后直接启动
+    entrypoint: ["bash", "-c", "if [ ! -d /hadoop/dfs/name/current ]; then hdfs namenode -format -force -nonInteractive; fi; exec hdfs namenode"]
+    volumes:
+      - hdfs-namenode-data:/hadoop/dfs/name
+      - ./hdfs/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+      - ./hdfs/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+    networks:
+      - patrol-net
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9870' || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 15
+      start_period: 90s   # 首次启动需 format, 较慢
+
+  # ===================== 6. HDFS DataNode =====================
+  hdfs-datanode:
+    image: apache/hadoop:3.3.6
+    container_name: datanode
+    hostname: datanode
+    restart: always
+    mem_limit: 1g
+    ports:
+      - "9864:9864"   # DataNode Web UI(WebHDFS 重定向目标)
+    entrypoint: ["bash", "-c", "exec hdfs datanode"]
+    volumes:
+      - hdfs-datanode-data:/hadoop/dfs/data
+      - ./hdfs/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+      - ./hdfs/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+    depends_on:
+      hdfs-namenode:
+        condition: service_healthy
+    networks:
+      - patrol-net
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9864' || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+
+  # ===================== 7. 后端双实例 (Spring Boot 3.2 + Java 17) =====================
+  # 后端源码目录: project/backend(Dockerfile 模板已就绪, 放入 pom.xml 与 src 即可构建)
+  backend-app-1:
+    image: patrol-backend:1.0.0
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: backend-app-1
+    hostname: backend-app-1
+    restart: always
+    mem_limit: 768m
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_PORT: "8080"
+      # ---- 容器间一律使用服务名(禁止 localhost) ----
+      SPRING_DATA_MONGODB_URI: mongodb://patrol:patrol123@mongodb:27017/patrol?authSource=patrol
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      PATROL_KAFKA_GROUP_ID: patrol-backend-group
+      PATROL_ES_URIS: http://elasticsearch:9200
+      PATROL_HDFS_WEBHDFS_BASE: http://namenode:9870
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      hdfs-namenode:
+        condition: service_healthy
+      hdfs-datanode:
+        condition: service_healthy
+    networks:
+      - patrol-net
+    healthcheck:
+      # 依赖后端实现 GET /api/health 返回 200(架构文档 §8 已设计)
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  backend-app-2:
+    image: patrol-backend:1.0.0
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: backend-app-2
+    hostname: backend-app-2
+    restart: always
+    mem_limit: 768m
+    ports:
+      - "8081:8081"
+    environment:
+      SERVER_PORT: "8081"
+      SPRING_DATA_MONGODB_URI: mongodb://patrol:patrol123@mongodb:27017/patrol?authSource=patrol
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      PATROL_KAFKA_GROUP_ID: patrol-backend-group
+      PATROL_ES_URIS: http://elasticsearch:9200
+      PATROL_HDFS_WEBHDFS_BASE: http://namenode:9870
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      hdfs-namenode:
+        condition: service_healthy
+      hdfs-datanode:
+        condition: service_healthy
+    networks:
+      - patrol-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8081/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # ===================== 8. Nginx (网关: 静态托管 + 负载均衡 + 限流) =====================
+  nginx:
+    image: nginx:1.25.3-alpine
+    container_name: nginx
+    hostname: nginx
+    restart: always
+    mem_limit: 128m
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/html:/usr/share/nginx/html:ro
+    depends_on:
+      backend-app-1:
+        condition: service_started
+      backend-app-2:
+        condition: service_started
+    networks:
+      - patrol-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 10s

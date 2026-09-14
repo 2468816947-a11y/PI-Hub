@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!--
+  Hadoop core-site.xml 核心配置
+  挂载位置: /opt/hadoop/etc/hadoop/core-site.xml
+-->
+<configuration>
+    <!-- 默认文件系统: 指向 NameNode 容器 RPC 地址(容器内用服务名, 禁止 localhost) -->
+    <property>
+        <name>fs.defaultFS</name>
+        <value>hdfs://namenode:8020</value>
+    </property>
+</configuration>

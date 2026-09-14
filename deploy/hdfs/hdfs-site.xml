@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!--
+  Hadoop hdfs-site.xml 核心配置(单 NameNode + 单 DataNode 模拟分布式)
+  挂载位置: /opt/hadoop/etc/hadoop/hdfs-site.xml
+-->
+<configuration>
+    <!-- 单机模拟: 副本因子 1 -->
+    <property>
+        <name>dfs.replication</name>
+        <value>1</value>
+    </property>
+
+    <!-- 开启 WebHDFS REST 接口(端口 = NameNode HTTP 9870) -->
+    <property>
+        <name>dfs.webhdfs.enabled</name>
+        <value>true</value>
+    </property>
+
+    <!-- 数据目录(挂载宿主卷, 容器重建不丢数据) -->
+    <property>
+        <name>dfs.namenode.name.dir</name>
+        <value>/hadoop/dfs/name</value>
+    </property>
+    <property>
+        <name>dfs.datanode.data.dir</name>
+        <value>/hadoop/dfs/data</value>
+    </property>
+
+    <!-- 开发环境关闭权限校验, 避免 WebHDFS 写操作 403 -->
+    <property>
+        <name>dfs.permissions.enabled</name>
+        <value>false</value>
+    </property>
+
+    <!-- Docker 网络下必须关闭主机名校验, 否则报
+         "Datanode denied communication with namenode because the hostname cannot be resolved" -->
+    <property>
+        <name>dfs.namenode.datanode.registration.ip-hostname-check</name>
+        <value>false</value>
+    </property>
+
+    <!-- 用主机名注册/重定向: Docker DNS 可解析 datanode 服务名 -->
+    <property>
+        <name>dfs.datanode.use.datanode.hostname</name>
+        <value>true</value>
+    </property>
+    <property>
+        <name>dfs.client.use.datanode.hostname</name>
+        <value>true</value>
+    </property>
+</configuration>
