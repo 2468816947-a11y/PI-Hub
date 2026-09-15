@@ -179,6 +179,13 @@ docker compose logs -f hdfs-namenode        # 观察启动进度
 
 `patrol-event` 索引的 `description` 字段使用 `ik_max_word` 分词，官方 ES 镜像不含该插件，后端初始化索引会报 `analyzer [ik_max_word] not found`。**现状**：compose 的 elasticsearch 服务已默认使用 `es/Dockerfile.ik` 构建（插件 zip 已入库，`COPY` 后 `file://` 离线安装，构建无需联网），es-init 容器会在首次启动时自动导入 patrol-event mapping。验证：`docker run --rm patrol-es-ik:8.11.0 bin/elasticsearch-plugin list` 应输出 `analysis-ik`。若仍需临时退回官方镜像，把 compose 中 build 段换回 image，并将 mapping 的 analyzer 改为 `standard`。
 
+### 4.7 后端本地构建踩坑（组员必读）
+
+后端骨架已入库，本机开发（IDEA + Maven）时有两个已知坑：
+
+1. **旧阿里云 Maven 镜像已废弃**：本地 `settings.xml` 若配置的是 `http://maven.aliyun.com/nexus/...`（旧地址），会下载失败或缺 artifact。改为 `https://maven.aliyun.com/repository/public`（或直接用 Maven Central）。
+2. **不要引入 `spring-boot-starter-kafka`**：该 starter 在 Maven Central 没有 3.x 版本（2.x 后直到 4.0 才重新发布，很多教程是 Boot 2.x 写法）。Boot 3 正确做法是直接依赖 `org.springframework.kafka:spring-kafka`（版本由 BOM 管理），自动配置照常生效 —— `backend/pom.xml` 已是正确写法，勿改回 starter。
+
 ## 5. 附录：后端接入配置
 
 后端 `application.yml` 直接消费 compose 注入的环境变量：
