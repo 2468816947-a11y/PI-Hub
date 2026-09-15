@@ -14,8 +14,9 @@ deploy/
 ├── kafka/server.properties     # KRaft 参考模板(容器由环境变量生成)
 ├── es/
 │   ├── elasticsearch.yml       # ES 单节点配置
-│   ├── Dockerfile.ik           # 可选: IK 中文分词插件镜像
-│   └── patrol-event-mapping.json  # 索引映射(架构文档 §6.3)
+│   ├── Dockerfile.ik           # IK 分词镜像构建文件(本地 zip 离线安装, compose 已默认启用)
+│   ├── elasticsearch-analysis-ik-8.11.0.zip  # IK 插件本地安装包(已入库, 构建无需联网)
+│   └── patrol-event-mapping.json  # 索引映射(架构文档 §6.3, es-init 容器自动导入)
 ├── hdfs/
 │   ├── core-site.xml           # fs.defaultFS -> namenode:8020
 │   └── hdfs-site.xml           # WebHDFS 开启/副本因子 1
@@ -23,7 +24,7 @@ deploy/
 └── simulator/application-simulator.yml   # 宿主机仿真器配置模板
 ```
 
-后端源码目录 `project/backend/`（Dockerfile 模板已就绪，放入 `pom.xml` + `src` 即可构建）。
+后端源码目录 `project/backend/`（Spring Boot 3.2 骨架已入库：统一信封/全局异常/JWT 认证 + login/health；其余业务接口按《04-接口文档》v1.2 开发中）。
 
 ## 1. 快速启动
 
@@ -32,8 +33,8 @@ deploy/
 ```bash
 cd deploy
 
-# ① 后端源码未就绪时，先只起中间件(互不依赖后端)
-docker compose up -d kafka mongodb elasticsearch kibana hdfs-namenode hdfs-datanode
+# ① 只起中间件(不含后端; IK 镜像由已入库的 zip 离线构建, 无需联网)
+docker compose up -d --build kafka kafka-init mongodb elasticsearch es-init kibana hdfs-namenode hdfs-datanode
 
 # ② 全套启动(含后端双实例 + Nginx)
 docker compose up -d --build
@@ -60,10 +61,10 @@ wsl -d docker-desktop sysctl -w vm.max_map_count=262144
 | MongoDB | `mongodb:27017` | `localhost:27017` | root: `admin/patrol-admin-2026`；业务: `patrol/patrol123`(authSource=patrol) | 库 `patrol`；集合 device/patrol_task/alarm/hdfs_file |
 | HDFS NameNode | `namenode:8020`(RPC)、`namenode:9870`(HTTP) | `localhost:9870` | 无 | WebHDFS 基址 `http://namenode:9870/webhdfs/v1` |
 | HDFS DataNode | `datanode:9864` | `localhost:9864` | 无 | 副本因子 1 |
-| Elasticsearch | `elasticsearch:9200` | `localhost:9200` | 无(安全已关, 仅开发) | 堆 512m；索引 `patrol-event`(geo_point + ik_max_word) |
+| Elasticsearch | `elasticsearch:9200` | `localhost:9200` | 无(安全已关, 仅开发) | 堆 512m；镜像内置 IK 分词(本地 zip 离线构建)；es-init 容器自动导入 `patrol-event` 索引(geo_point + ik_max_word) |
 | Kibana | `kibana:5601` | `localhost:5601` | 无 | 中文界面；自动连 `http://elasticsearch:9200` |
 | Nginx | `nginx:80` | `localhost:80` | 无 | `/api` → 双后端轮询；`/api/search` 限流 10r/s；上传上限 20m |
-| backend-app-1 | `backend-app-1:8080` | `localhost:8080` | JWT(后端自管) | Spring Boot 3.2 + Java 17 |
+| backend-app-1 | `backend-app-1:8080` | `localhost:8080` | JWT: `admin/admin123` | Spring Boot 3.2 + Java 17；当前已实现 login/health，其余接口按接口文档 v1.2 开发中 |
 | backend-app-2 | `backend-app-2:8081` | `localhost:8081` | 同上 | 与 1 同镜像不同端口 |
 | 仿真器(宿主机) | —— | 连 `localhost:9092` / `localhost:27017` | `patrol/patrol123` | 模拟 10 台设备(6 无人机 + 4 机器狗) |
 
@@ -88,6 +89,10 @@ docker exec namenode hdfs dfs -mkdir -p /patrol && docker exec namenode hdfs dfs
 
 # ES: 集群 green
 curl "http://localhost:9200/_cluster/health?pretty"
+
+# ES: IK 插件已安装 + patrol-event 索引已由 es-init 导入
+docker run --rm patrol-es-ik:8.11.0 bin/elasticsearch-plugin list
+curl -s "http://localhost:9200/patrol-event/_mapping" | grep -o "ik_max_word" | head -1
 
 # 网关与负载均衡: 连续请求, 观察 access.log 中 up=backend-app-1/2 交替
 curl http://localhost/healthz
@@ -170,9 +175,9 @@ docker compose logs -f hdfs-namenode        # 观察启动进度
 
 **原因/解决**：① NameNode 首次 format + 启动需 30~90s，ES 首次 60s+，已放宽 `start_period`，耐心等待；② 数据卷损坏（非正常关机/反复实验）→ `docker compose down -v` 清卷重来（**会删除全部数据**）；③ 后端 healthcheck 依赖 `GET /api/health` 接口（架构文档 §8 已设计），未实现前后端会一直 unhealthy（不影响启动，但 Nginx 轮询可能命中未就绪实例）。
 
-### 4.6 特别提醒：IK 分词插件
+### 4.6 特别提醒：IK 分词插件（已解决）
 
-`patrol-event` 索引的 `description` 字段使用 `ik_max_word` 分词，官方 ES 镜像不含该插件，后端初始化索引会报 `analyzer [ik_max_word] not found`。解决：用 `es/Dockerfile.ik` 构建镜像（compose 中 elasticsearch 服务改 build 段，见文件内注释），或临时把 mapping 的 analyzer 改为 `standard`。
+`patrol-event` 索引的 `description` 字段使用 `ik_max_word` 分词，官方 ES 镜像不含该插件，后端初始化索引会报 `analyzer [ik_max_word] not found`。**现状**：compose 的 elasticsearch 服务已默认使用 `es/Dockerfile.ik` 构建（插件 zip 已入库，`COPY` 后 `file://` 离线安装，构建无需联网），es-init 容器会在首次启动时自动导入 patrol-event mapping。验证：`docker run --rm patrol-es-ik:8.11.0 bin/elasticsearch-plugin list` 应输出 `analysis-ik`。若仍需临时退回官方镜像，把 compose 中 build 段换回 image，并将 mapping 的 analyzer 改为 `standard`。
 
 ## 5. 附录：后端接入配置
 

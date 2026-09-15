@@ -123,14 +123,15 @@ services:
       retries: 10
       start_period: 30s
 
-  # ===================== 3. Elasticsearch 8.x (单节点) =====================
-  # 可选: 安装 IK 中文分词插件(架构文档 §6.3 索引用到 ik_max_word),
-  #       将下方 image 注释掉, 改用 build 段(Dockerfile 见 es/Dockerfile.ik)
+  # ===================== 3. Elasticsearch 8.x (单节点, 内置 IK 分词) =====================
+  # 已切换为内置 IK 的构建镜像(接口文档 v1.2 keyword 检索依赖 ik_max_word);
+  # 若构建机无法访问 GitHub Releases 下载 IK 插件, 参考 es/Dockerfile.ik 注释
+  # 改为 file:// 本地安装, 或临时退回官方 image 并把 mapping 的 analyzer 改为 standard
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-    # build:
-    #   context: ./es
-    #   dockerfile: Dockerfile.ik
+    build:
+      context: ./es
+      dockerfile: Dockerfile.ik
+    image: patrol-es-ik:8.11.0
     container_name: elasticsearch
     hostname: elasticsearch
     restart: always
@@ -156,6 +157,31 @@ services:
       timeout: 10s
       retries: 12
       start_period: 60s
+
+  # ---- ES 一次性初始化: 导入 patrol-event 索引 mapping ----
+  # 与 kafka-init 同模式: 等待 ES 健康后, 去掉 mapping 文件中的注释行再 PUT;
+  # 后端启动时亦会显式创建(幂等), 此处兜底保证首次联调前索引就绪
+  es-init:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: es-init
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - patrol-net
+    volumes:
+      - ./es/patrol-event-mapping.json:/mapping/patrol-event-mapping.json:ro
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        grep -v '^[[:space:]]*//' /mapping/patrol-event-mapping.json > /tmp/mapping.json
+        curl -fsS -X PUT "http://elasticsearch:9200/patrol-event" \
+          -H "Content-Type: application/json" \
+          --data-binary @/tmp/mapping.json
+        echo "=== patrol-event mapping ==="
+        curl -fsS "http://elasticsearch:9200/patrol-event/_mapping"
 
   # ===================== 4. Kibana =====================
   kibana:
