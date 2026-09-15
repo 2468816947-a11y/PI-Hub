@@ -1,0 +1,46 @@
+# =====================================================================
+# 电力场站设备巡检数据集成平台 —— 业务服务配置
+# 所有中间件地址优先取环境变量(由 docker-compose.yml 注入),
+# 缺省值指向容器网络内的服务名 —— 容器间一律用服务名, 禁止 localhost。
+# =====================================================================
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: patrol-backend
+
+  data:
+    mongodb:
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb://patrol:patrol123@mongodb:27017/patrol?authSource=patrol}
+
+  elasticsearch:
+    uris: ${PATROL_ES_URIS:http://elasticsearch:9200}
+
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    consumer:
+      group-id: ${PATROL_KAFKA_GROUP_ID:patrol-backend-group}
+      auto-offset-reset: earliest
+      enable-auto-commit: false        # 架构文档 §5: 手动提交 + msgId 幂等去重
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+patrol:
+  jwt:
+    # 生产环境必须更换并通过环境变量注入
+    secret: ${PATROL_JWT_SECRET:patrol-dev-secret-key-2026-change-me-in-production-0123456789}
+    expire-seconds: ${PATROL_JWT_EXPIRE:7200}   # 2 小时
+  hdfs:
+    webhdfs-base: ${PATROL_HDFS_WEBHDFS_BASE:http://namenode:9870}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.patrol: INFO
