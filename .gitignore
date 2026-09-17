@@ -6,6 +6,9 @@
 # Claude 配置
 .claude/
 
+# Cursor IDE 配置
+.cursor/
+
 # Java 编译产物
 target/
 *.class

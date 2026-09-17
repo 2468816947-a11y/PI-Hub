@@ -10,30 +10,68 @@ spring:
   application:
     name: patrol-backend
 
+  config:
+    activate:
+      on-profile: ${SPRING_PROFILES_ACTIVE:container}
+
   data:
     mongodb:
       uri: ${SPRING_DATA_MONGODB_URI:mongodb://patrol:patrol123@mongodb:27017/patrol?authSource=patrol}
+      auto-index-creation: true   # 启动时自动创建 @Indexed/@CompoundIndex
+
+    elasticsearch:
+      repositories:
+        enabled: true
 
   elasticsearch:
     uris: ${PATROL_ES_URIS:http://elasticsearch:9200}
+    username: ${PATROL_ES_USERNAME:}
+    password: ${PATROL_ES_PASSWORD:}
 
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
     consumer:
       group-id: ${PATROL_KAFKA_GROUP_ID:patrol-backend-group}
       auto-offset-reset: earliest
-      enable-auto-commit: false        # 架构文档 §5: 手动提交 + msgId 幂等去重
+      enable-auto-commit: false                    # 手动提交 + msgId 幂等去重(架构 §5)
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.json.trusted.packages: "*"           # 反序列化信任包(占位, 当前用 String 反序列化)
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      retries: 3
+    listener:
+      ack-mode: manual_immediate                    # 手动立即 ack(配合 enable-auto-commit=false)
+      missing-topics-fatal: false                   # Topic 不存在不致命(开发期 Topic 由 Kafka 自动创建或运维预创建)
+      concurrency: 2                                # 每 Topic 并发消费者数(双实例场景单实例 2 = 4 总)
 
+# 业务配置(非 Spring 标准配置, 统一前缀 patrol.*)
 patrol:
   jwt:
-    # 生产环境必须更换并通过环境变量注入
-    secret: ${PATROL_JWT_SECRET:patrol-dev-secret-key-2026-change-me-in-production-0123456789}
-    expire-seconds: ${PATROL_JWT_EXPIRE:7200}   # 2 小时
+    # 生产环境必须更换并通过环境变量注入, 密钥长度 ≥ 256bit
+    secret: ${PATROL_JWT_SECRET:patrol-dev-secret-key-2026-change-me-in-production-0123456789abcdef}
+    expire-seconds: ${PATROL_JWT_EXPIRE:7200}    # 2 小时
   hdfs:
     webhdfs-base: ${PATROL_HDFS_WEBHDFS_BASE:http://namenode:9870}
+    user: ${PATROL_HDFS_USER:dr.who}
+  instance:
+    # 双实例区分: 通过环境变量注入 INSTANCE_NAME(容器内默认 HOSTNAME),
+    # 容器部署时 docker-compose.yml 中显式设置 INSTANCE_NAME=backend-app-1/2
+    name: ${INSTANCE_NAME:${HOSTNAME:backend-app-1}}
+  kafka:
+    topics:
+      # 8 个业务 Topic 统一管理(架构 §5), 与接口文档附录 A.2 一一对应
+      register:    ${PATROL_TOPIC_REGISTER:patrol.device.register}
+      heartbeat:   ${PATROL_TOPIC_HEARTBEAT:patrol.device.heartbeat}
+      status:      ${PATROL_TOPIC_STATUS:patrol.device.status}
+      image:       ${PATROL_TOPIC_IMAGE:patrol.drone.image}
+      thermal:     ${PATROL_TOPIC_THERMAL:patrol.dog.thermal}
+      sensor:      ${PATROL_TOPIC_SENSOR:patrol.dog.sensor}
+      task-result: ${PATROL_TOPIC_TASK_RESULT:patrol.task.result}
+      task-command:${PATROL_TOPIC_TASK_COMMAND:patrol.task.command}
 
 management:
   endpoints:
@@ -44,3 +82,32 @@ management:
 logging:
   level:
     com.patrol: INFO
+    org.springframework.kafka: WARN
+    org.springframework.data.mongodb: WARN
+    org.springframework.data.elasticsearch: WARN
+
+---
+# 本地开发 profile: 中间件地址指向 localhost
+spring:
+  config:
+    activate:
+      on-profile: local
+  data:
+    mongodb:
+      uri: mongodb://patrol:patrol123@localhost:27017/patrol?authSource=patrol
+    elasticsearch:
+      uris: http://localhost:9200
+  kafka:
+    bootstrap-servers: localhost:9092
+patrol:
+  hdfs:
+    webhdfs-base: http://localhost:9870
+    user: dr.who
+
+---
+# 容器生产 profile: 全部走环境变量注入, 禁止硬编码
+spring:
+  config:
+    activate:
+      on-profile: container
+# container profile 完全依赖环境变量, 不覆盖任何值
