@@ -1,0 +1,158 @@
+/* ================= 全局基础样式 ================= */
+:root {
+  /* 覆盖 Element Plus 主色为电力蓝 */
+  --el-color-primary: #1769ff;
+  --el-color-primary-light-3: #5490ff;
+  --el-color-primary-light-5: #8bb4ff;
+  --el-color-primary-light-7: #c0d4ff;
+  --el-color-primary-light-8: #d6e3ff;
+  --el-color-primary-light-9: #ecf2ff;
+  --el-border-radius-base: 6px;
+  --app-sidebar-bg: #101b33;
+  --app-sidebar-active: #1d3a6e;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  font-family: 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Helvetica,
+    Arial, sans-serif;
+  color: #1f2733;
+  background: #f0f3f8;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #c6ccd8;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a8b0c0;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ================= 通用工具类 ================= */
+.page-container {
+  padding: 16px;
+}
+
+.filter-card {
+  margin-bottom: 14px;
+}
+
+.table-card {
+  background: #fff;
+  border-radius: 8px;
+}
+
+.pagination-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2733;
+}
+
+.text-muted {
+  color: #8a93a4;
+}
+
+.text-danger {
+  color: #f56c6c;
+}
+
+.flex {
+  display: flex;
+}
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.gap-8 {
+  gap: 8px;
+}
+.gap-12 {
+  gap: 12px;
+}
+
+/* 数字等宽, 大屏观感更好 */
+.mono {
+  font-family: 'Consolas', 'Menlo', monospace;
+}
+
+/* 大屏卡片通用 */
+.dash-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 2px 10px rgba(16, 27, 51, 0.05);
+}
+
+/* 离线设备点位呼吸动画 */
+@keyframes pulse-offline {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+.marker-offline {
+  animation: pulse-offline 1.6s ease-in-out infinite;
+}
+
+/* 报告打印: 隐藏导航, 只留报告主体 */
+@media print {
+  .sidebar,
+  .header {
+    display: none !important;
+  }
+  .main {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+  .reports {
+    padding: 0 !important;
+  }
+  body {
+    background: #fff !important;
+  }
+  .report-paper {
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+}

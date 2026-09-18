@@ -1,0 +1,81 @@
+/**
+ * 业务枚举字典 —— 值与《04-接口文档.md》§1.5 严格一致, 禁止私自改名。
+ * label 用于页面展示, tag 用于 Element Plus 标签配色。
+ */
+
+// 设备类型
+export const DEVICE_TYPE = {
+  UAV: { label: '无人机', tag: 'primary' },
+  ROBOT_DOG: { label: '机器狗', tag: 'warning' }
+}
+
+// 设备在线状态
+export const DEVICE_STATUS = {
+  ONLINE: { label: '在线', tag: 'success' },
+  OFFLINE: { label: '离线', tag: 'info' }
+}
+
+// 任务类型
+export const TASK_TYPE = {
+  THERMAL: { label: '红外测温', tag: 'danger' },
+  IMAGE: { label: '航拍巡检', tag: 'primary' },
+  SENSOR: { label: '环境监测', tag: 'success' },
+  COMPREHENSIVE: { label: '综合巡检', tag: 'warning' }
+}
+
+// 任务状态
+export const TASK_STATUS = {
+  CREATED: { label: '已创建', tag: 'info' },
+  DISPATCHED: { label: '已下发', tag: 'primary' },
+  RUNNING: { label: '执行中', tag: 'warning' },
+  FINISHED: { label: '已完成', tag: 'success' },
+  FAILED: { label: '失败', tag: 'danger' }
+}
+
+// 告警等级
+export const ALARM_LEVEL = {
+  CRITICAL: { label: '严重', tag: 'danger' },
+  MAJOR: { label: '重要', tag: 'warning' },
+  MINOR: { label: '一般', tag: 'info' }
+}
+
+// 告警类型
+export const ALARM_TYPE = {
+  TEMP_OVER: { label: '超温告警', tag: 'danger' },
+  BATTERY_LOW: { label: '低电量', tag: 'warning' },
+  OFFLINE: { label: '设备离线', tag: 'info' },
+  FAULT: { label: '设备故障', tag: 'danger' }
+}
+
+// 巡检事件类型(ES 检索用)
+export const EVENT_TYPE = {
+  IMAGE: { label: '航拍图像', tag: 'primary' },
+  THERMAL: { label: '红外测温', tag: 'danger' },
+  SENSOR: { label: '环境传感', tag: 'success' },
+  ALARM: { label: '告警事件', tag: 'warning' }
+}
+
+// 告警处置状态
+export const ALARM_STATUS = {
+  NEW: { label: '未处置', tag: 'danger' },
+  PROCESSED: { label: '已处置', tag: 'success' }
+}
+
+/** 取字典标签, 未知值原样返回 */
+export function dictLabel(map, value) {
+  if (value === null || value === undefined || value === '') return '—'
+  return map[value]?.label ?? value
+}
+
+/** 取字典 tag 类型 */
+export function dictTag(map, value) {
+  return map[value]?.tag ?? 'info'
+}
+
+/** 下拉选项生成 */
+export function dictOptions(map) {
+  return Object.entries(map).map(([value, item]) => ({
+    value,
+    label: item.label
+  }))
+}
