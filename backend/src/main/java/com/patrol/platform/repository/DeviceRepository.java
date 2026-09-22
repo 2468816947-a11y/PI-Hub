@@ -63,9 +63,4 @@ public interface DeviceRepository extends MongoRepository<Device, String> {
      * 仿真规模 ≤ 10 台设备, 全表扫描安全; 大规模场景应改用 Mongo $where 或 Indexed 查询。
      */
     List<Device> findByStatus(String status);
-
-    /**
-     * 按状态分页查询(用于设备管理 API)。
-     */
-    Page<Device> findByStatus(String status, Pageable pageable);
 }

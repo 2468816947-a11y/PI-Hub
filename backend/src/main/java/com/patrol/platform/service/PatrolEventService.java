@@ -16,6 +16,7 @@ import org.springframework.data.elasticsearch.core.query.IndexQueryBuilder;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
+import java.util.Optional;
 
 /**
  * 巡检事件索引 Service。
@@ -68,13 +69,13 @@ public class PatrolEventService {
                 .deviceType(msg.getDeviceType())
                 .deviceName(device != null ? device.getName() : null)
                 .eventType(BusinessConstants.EVENT_TYPE_THERMAL)
-                .taskId(asString(msg.getData().get("taskId")))
+                .taskId(asString(msg.getData().get("taskId")).orElse(null))
                 .area(device != null ? device.getArea() : null)
                 .temperature(temperature)
                 .position(toGeoPoint(msg.getData()))
                 .eventTime(parseTimestamp(msg.getTimestamp()))
                 .description(String.format("%s 测点温度 %.1f℃",
-                        asString(msg.getData().get("targetDevice")),
+                        asString(msg.getData().get("targetDevice")).orElse("目标设备"),
                         temperature != null ? temperature : 0.0))
                 .build();
         indexSafely(doc);
@@ -139,8 +140,9 @@ public class PatrolEventService {
         }
     }
 
-    private String asString(Object v) {
-        return v == null ? null : String.valueOf(v);
+    private Optional<String> asString(Object v) {
+        if (v == null) return Optional.empty();
+        return Optional.of(String.valueOf(v));
     }
 
     private Double asDouble(Object v) {
@@ -154,8 +156,8 @@ public class PatrolEventService {
     }
 
     private String buildImageDescription(KafkaMessage msg, boolean hasHdfsFile, String hdfsPath) {
-        String fileName = asString(msg.getData().get("fileName"));
-        String camera = asString(msg.getData().get("cameraType"));
+        String fileName = asString(msg.getData().get("fileName")).orElse("未知");
+        String camera = asString(msg.getData().get("cameraType")).orElse("未知");
         return String.format("航拍图像: %s, 相机: %s, 已归档: %s, 路径: %s",
                 fileName, camera, hasHdfsFile ? "是" : "否", hasHdfsFile ? hdfsPath : "-");
     }

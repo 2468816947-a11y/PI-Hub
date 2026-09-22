@@ -4,6 +4,7 @@ import com.patrol.platform.common.BusinessConstants;
 import com.patrol.platform.entity.Device;
 import com.patrol.platform.repository.DeviceRepository;
 import com.patrol.platform.service.AlarmService;
+import com.patrol.platform.service.DeviceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -30,6 +31,7 @@ import java.util.List;
 public class DeviceOfflineScheduler {
 
     private final DeviceRepository deviceRepository;
+    private final DeviceService deviceService;
     private final AlarmService alarmService;
 
     /**
@@ -50,7 +52,7 @@ public class DeviceOfflineScheduler {
             if (device.getLastHeartbeat() != null && device.getLastHeartbeat().isBefore(threshold)) {
                 log.info("Device offline detected: deviceId={}, lastHeartbeat={}, now={}",
                         device.getDeviceId(), device.getLastHeartbeat(), now);
-                alarmService.markOffline(device.getDeviceId());
+                deviceService.markOffline(device.getDeviceId());
                 alarmService.createOfflineAlarm(device);
                 offlineCount++;
             }

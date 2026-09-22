@@ -28,6 +28,13 @@
             <artifactId>spring-boot-starter</artifactId>
         </dependency>
 
+        <!-- Spring Boot JSON: 包含 Jackson + JSR310 + ObjectMapper 自动配置
+             (本模块不引 web,但 KafkaTemplate + 业务代码都用到 ObjectMapper) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-json</artifactId>
+        </dependency>
+
         <!-- Kafka: spring-boot-3 正确做法直接引入 spring-kafka(BOM 管版本,自动配置照常生效) -->
         <dependency>
             <groupId>org.springframework.kafka</groupId>

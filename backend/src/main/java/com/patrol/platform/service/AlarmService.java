@@ -61,7 +61,7 @@ public class AlarmService {
         if (data == null) return;
 
         Integer battery = asInteger(data.get("battery"));
-        String faultCode = asString(data.get("faultCode"));
+        String faultCode = asString(data.get("faultCode")).orElse(null);
 
         if (battery != null && battery < BusinessConstants.BATTERY_LOW_THRESHOLD) {
             createAlarm(
@@ -109,7 +109,7 @@ public class AlarmService {
         if (temperature > tempThreshold) {
             createAlarm(
                     msg.getDeviceId(),
-                    asString(msg.getData().get("taskId")),
+                    asString(msg.getData().get("taskId")).orElse(null),
                     BusinessConstants.ALARM_TYPE_TEMP_OVER,
                     BusinessConstants.ALARM_LEVEL_CRITICAL,
                     temperature,
@@ -123,7 +123,7 @@ public class AlarmService {
             // 一般阈值: 60~80 区间(MAJOR)
             createAlarm(
                     msg.getDeviceId(),
-                    asString(msg.getData().get("taskId")),
+                    asString(msg.getData().get("taskId")).orElse(null),
                     BusinessConstants.ALARM_TYPE_TEMP_OVER,
                     BusinessConstants.ALARM_LEVEL_MAJOR,
                     temperature,
@@ -204,7 +204,7 @@ public class AlarmService {
                     .alarmLevel(alarm.getLevel())
                     .taskId(alarm.getTaskId())
                     .area(device != null ? device.getArea() : null)
-                    .value(alarm.getValue())
+                    .temperature(alarm.getValue())
                     .threshold(alarm.getThreshold())
                     .position(toGeoPoint(alarm.getPosition()))
                     .eventTime(alarm.getCreateTime() != null ? alarm.getCreateTime().toString() : null)

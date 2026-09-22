@@ -28,7 +28,7 @@ public final class IdGenerator {
      */
     public static String nextDeviceId(String deviceType) {
         long seq = DEVICE_COUNTER.incrementAndGet();
-        String prefix = DEVICE_TYPE_ROBOT_DOG.equals(deviceType) ? "ROBOTDOG" : "UAV";
+        String prefix = BusinessConstants.DEVICE_TYPE_ROBOT_DOG.equals(deviceType) ? "ROBOTDOG" : "UAV";
         return String.format("%s-%013d-%d", prefix, System.currentTimeMillis(), seq);
     }
 

@@ -6,6 +6,7 @@ import com.patrol.platform.common.ErrorCode;
 import com.patrol.platform.common.IdGenerator;
 import com.patrol.platform.entity.Device;
 import com.patrol.platform.entity.HdfsFile;
+import com.patrol.platform.kafka.KafkaMessage;
 import com.patrol.platform.repository.HdfsFileRepository;
 import com.patrol.platform.storage.HdfsClient;
 import lombok.RequiredArgsConstructor;
@@ -166,7 +167,7 @@ public class HdfsFileService {
                 .hdfsPath(hdfsPath)
                 .deviceId(deviceId)
                 .taskId(taskId)
-                .fileSize(bytes.length)
+                .fileSize((long) bytes.length)
                 .uploadTime(OffsetDateTime.now())
                 .build();
         return hdfsFileRepository.save(meta);
