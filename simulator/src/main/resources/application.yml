@@ -1,0 +1,95 @@
+spring:
+  application:
+    name: patrol-device-simulator
+
+  # ============================================================
+  # Kafka 配置(宿主机进程, 通过 localhost:9092 连接 docker compose 暴露的 Kafka)
+  # 完整字段说明见 deploy/README.md §4.2: 容器内用 kafka:9092,宿主机用 localhost:9092
+  # ============================================================
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: 1
+      retries: 3
+      properties:
+        # 单消息 ≤ 1MB(含 base64 模拟图片 ≤ 200KB, 安全)
+        max.request.size: 1048576
+    consumer:
+      group-id: ${SIMULATOR_GROUP_ID:simulator-group}
+      # 仿真器只关心 TASK_COMMAND 指令, 启动时拿到全量历史指令也无副作用(任务结果按 taskId 去重)
+      auto-offset-reset: latest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      max-poll-records: 50
+    listener:
+      ack-mode: manual
+
+# ============================================================
+# 仿真器配置项(架构 §9: 仿真器进程×N, 宿主机运行, 模拟 10 台设备)
+# ============================================================
+simulator:
+  # 设备规模:默认 6 台无人机 + 4 台机器狗,与架构 §9 一致
+  drone-count: ${DRONE_COUNT:6}
+  robot-dog-count: ${ROBOT_DOG_COUNT:4}
+
+  # 时序参数
+  heartbeat-interval-ms: 5000      # 心跳周期 5s(接口文档 §2.2.5: 离线阈值 15s = 3 个周期)
+  status-interval-ms: 30000        # 周期性状态上报间隔
+  drone-image-interval-ms: 8000    # 无人机空闲巡航:图像上报间隔(无任务时)
+  dog-sensor-interval-ms: 10000    # 机器狗空闲巡航:环境传感器上报间隔
+
+  # 任务执行节奏(模拟真实采集耗时)
+  thermal-point-interval-ms: 1500  # THERMAL 任务相邻测点间隔(测点采集耗时)
+  image-interval-ms: 2000          # IMAGE 任务相邻图像间隔
+
+  # 故障/异常注入(便于触发告警分支)
+  fault-injection-rate: 0.02       # 单设备每心跳周期注入故障的概率(2%)
+  temp-over-rate: 0.10             # THERMAL 测点超阈值概率(10%)
+  battery-drain-per-hour: 2.0      # 电量消耗速率(%/小时,模拟真实耗电)
+
+  # 模拟图片(<=200KB),包含时是否一并写入 IMAGE.imageBase64
+  image-base64-enabled: true
+
+  # Kafka Topic(默认与 docker-compose 中 kafka-init 创建的一致)
+  topics:
+    register: patrol.device.register
+    heartbeat: patrol.device.heartbeat
+    status: patrol.device.status
+    drone-image: patrol.drone.image
+    dog-thermal: patrol.dog.thermal
+    dog-sensor: patrol.dog.sensor
+    task-result: patrol.task.result
+    task-command: patrol.task.command
+
+# ============================================================
+# 设备池配置(模拟场站位置 / 设备命名规则)
+# ============================================================
+device-pool:
+  areas:
+    - "1号变电站·东区"
+    - "1号变电站·西区"
+    - "2号变电站·北区"
+    - "光伏场站A区"
+  drone-models:
+    - "巡检无人机-M300"
+    - "巡检无人机-M30"
+  dog-models:
+    - "四足机器狗-宇树Go2"
+    - "四足机器狗-云深处"
+  # 场站中心点(北京天安门附近, 与需求文档示例坐标一致), 设备在此基础上随机偏移 ±0.01°
+  center:
+    lng: 116.397
+    lat: 39.908
+  position-jitter: 0.005
+
+logging:
+  level:
+    root: INFO
+    com.patrol.simulator: INFO
+    org.apache.kafka: WARN
+    org.springframework.kafka: WARN
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{30} - %msg%n"
