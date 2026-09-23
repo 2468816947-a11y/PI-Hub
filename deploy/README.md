@@ -10,7 +10,7 @@ deploy/
 ├── README.md                   # 本手册
 ├── nginx/
 │   ├── nginx.conf              # 网关配置(负载均衡/限流/静态托管)
-│   └── html/index.html         # 前端占位页(替换为 dist 产物)
+│   └── html/                   # 前端构建产物(由 frontend/dist 同步)
 ├── kafka/server.properties     # KRaft 参考模板(容器由环境变量生成)
 ├── es/
 │   ├── elasticsearch.yml       # ES 单节点配置
@@ -24,7 +24,7 @@ deploy/
 └── simulator/application-simulator.yml   # 宿主机仿真器配置模板
 ```
 
-后端源码目录 `project/backend/`（Spring Boot 3.2 骨架已入库：统一信封/全局异常/JWT 认证 + login/health；其余业务接口按《04-接口文档》v1.2 开发中）。
+后端源码目录 `project/backend/`（Spring Boot 3.2：19 个 REST 接口全量实现——统一信封/全局异常/JWT 认证、设备/任务/告警/检索/统计/报告/文件，详见《04-接口文档》v1.2）。
 
 ## 1. 快速启动
 
@@ -64,9 +64,9 @@ wsl -d docker-desktop sysctl -w vm.max_map_count=262144
 | Elasticsearch | `elasticsearch:9200` | `localhost:9200` | 无(安全已关, 仅开发) | 堆 512m；镜像内置 IK 分词(本地 zip 离线构建)；es-init 容器自动导入 `patrol-event` 索引(geo_point + ik_max_word) |
 | Kibana | `kibana:5601` | `localhost:5601` | 无 | 中文界面；自动连 `http://elasticsearch:9200` |
 | Nginx | `nginx:80` | `localhost:80` | 无 | `/api` → 双后端轮询；`/api/search` 限流 10r/s；上传上限 20m |
-| backend-app-1 | `backend-app-1:8080` | `localhost:8080` | JWT: `admin/admin123` | Spring Boot 3.2 + Java 17；当前已实现 login/health，其余接口按接口文档 v1.2 开发中 |
+| backend-app-1 | `backend-app-1:8080` | `localhost:8080` | JWT: `admin/admin123` | Spring Boot 3.2 + Java 17；19 个 REST 接口全量实现 |
 | backend-app-2 | `backend-app-2:8081` | `localhost:8081` | 同上 | 与 1 同镜像不同端口 |
-| 仿真器(宿主机) | —— | 连 `localhost:9092` / `localhost:27017` | `patrol/patrol123` | 模拟 10 台设备(6 无人机 + 4 机器狗) |
+| 仿真器(宿主机) | —— | 只连 `localhost:9092`(Kafka) | —— | 模拟 10 台设备(6 无人机 + 4 机器狗) |
 
 Topic 清单：`patrol.device.register` / `patrol.device.heartbeat` / `patrol.device.status` / `patrol.drone.image` / `patrol.dog.thermal` / `patrol.dog.sensor` / `patrol.task.result` / `patrol.task.command`。
 
@@ -192,7 +192,7 @@ docker inspect kafka --format '{{json .State.Health}}'
 docker compose logs -f hdfs-namenode        # 观察启动进度
 ```
 
-**原因/解决**：① NameNode 首次 format + 启动需 30~90s，ES 首次 60s+，已放宽 `start_period`，耐心等待；② 数据卷损坏（非正常关机/反复实验）→ `docker compose down -v` 清卷重来（**会删除全部数据**）；③ 后端 healthcheck 依赖 `GET /api/health` 接口（架构文档 §8 已设计），未实现前后端会一直 unhealthy（不影响启动，但 Nginx 轮询可能命中未就绪实例）。
+**原因/解决**：① NameNode 首次 format + 启动需 30~90s，ES 首次 60s+，已放宽 `start_period`，耐心等待；② 数据卷损坏（非正常关机/反复实验）→ `docker compose down -v` 清卷重来（**会删除全部数据**）；③ 后端 healthcheck 依赖 `GET /api/health` 接口，该接口异常时容器会一直 unhealthy（不影响启动，但 Nginx 轮询可能命中未就绪实例）。
 
 ### 4.6 特别提醒：IK 分词插件（已解决）
 
