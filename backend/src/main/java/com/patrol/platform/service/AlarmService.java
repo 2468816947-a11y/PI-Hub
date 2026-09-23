@@ -50,8 +50,8 @@ public class AlarmService {
     /**
      * 处理 STATUS 消息中的电量与故障判定。
      * <p>
-     * 同一事件多告警时各自写入; 已存在的相同类型告警(最近未处置)避免重复刷屏——本版本简化,
-     * 每条 STATUS 都生成新告警, 真实生产可加入"相同设备+相同类型+未处置"去重。
+     * 同一事件多告警时各自写入; 相同设备+相同类型的未处置(NEW)告警在 createAlarm 中
+     * 自动合并刷新(不重复新建), 避免设备持续上报低电量/故障时告警列表刷屏。
      */
     public void checkStatusAlarms(KafkaMessage msg) {
         Device device = deviceRepository.findById(msg.getDeviceId()).orElse(null);
@@ -154,10 +154,33 @@ public class AlarmService {
 
     /**
      * 通用告警创建: 写 Mongo + 写 ES。
+     * <p>
+     * 去重合并策略: 同一设备 + 同一告警类型 + 存在未处置(NEW)告警时,
+     * 刷新该告警的数值/描述/时间, 不重复新建(离线告警同理, 见测试组文档缺口 3)。
      */
     private void createAlarm(String deviceId, String taskId, String alarmType, String level,
                              Double value, Double threshold, Device device, String description) {
         OffsetDateTime now = OffsetDateTime.now();
+
+        Optional<Alarm> existing = alarmRepository
+                .findTopByDeviceIdAndAlarmTypeAndStatusOrderByCreateTimeDesc(
+                        deviceId, alarmType, BusinessConstants.ALARM_STATUS_NEW);
+        if (existing.isPresent()) {
+            Alarm merged = existing.get();
+            merged.setTaskId(taskId);
+            merged.setLevel(level);
+            merged.setValue(value);
+            merged.setThreshold(threshold);
+            merged.setDescription(description);
+            merged.setCreateTime(now);
+            alarmRepository.save(merged);
+            log.info("Alarm merged (existing NEW): alarmId={}, type={}, deviceId={}",
+                    merged.getAlarmId(), alarmType, deviceId);
+            // 同步刷新 ES 中同一条告警事件(文档 id 为 alarmId, 直接覆盖)
+            indexAlarmEvent(merged, device);
+            return;
+        }
+
         Alarm.AlarmPosition pos = device != null && device.getPosition() != null
                 ? Alarm.AlarmPosition.builder()
                     .lng(device.getPosition().getLng())

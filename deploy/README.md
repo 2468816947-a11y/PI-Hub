@@ -99,11 +99,30 @@ curl http://localhost/healthz
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost/api/health
 docker logs nginx | grep 'up='
 
-# 限流验证: 快速连发 30 次, 应出现 429
-for i in $(seq 1 30); do curl -s -o /dev/null -w "%{http_code} " http://localhost/api/search/stats; done; echo
+# 限流验证: 注意必须"真并发"才能触发 429(串行 30 次速率仅 ~10-15r/s, 被 burst=20 吸收,
+# 2026-09-23 实测), 用 curl --parallel-immediate(≥7.66)同时发起:
+curl -s -o /dev/null -w "%{http_code}\n" --parallel --parallel-immediate --parallel-max 30 \
+  http://localhost/api/search/stats \
+  $(for i in $(seq 1 30); do printf -- "--url http://localhost/api/search/stats "; done) \
+  | sort | uniq -c
+# 预期: 200/401 为主 + 出现 429; 429 响应带 Retry-After: 1 头
 ```
 
 ## 4. 常见踩坑与排错指南
+
+### 4.0 后端容器重建后 Nginx 持续 502（必读）
+
+**症状**：`docker compose build backend-app-1 backend-app-2 && docker compose up -d` 后，后端 healthcheck 正常但经网关访问 `/api/*` 持续 502；`docker logs nginx` 出现 `connect() failed (111: Connection refused)`。
+
+**原因**：nginx 的 `upstream patrol_backend` 成员主机名在**配置加载时静态解析一次**（容器重建后 IP 变化，且 Docker 常把 .2/.3 两个 IP 互换，端口对不上必然拒绝）。nginx.conf 里的 `resolver 127.0.0.11` 只对"变量方式 proxy_pass 的主机名"生效，**不会**让 upstream 成员自动重解析（2026-09-23 实测）。
+
+**解决**：重建后端后执行一次：
+
+```bash
+docker exec nginx nginx -s reload   # 重新解析 upstream 成员 IP, 秒级生效、不中断服务
+```
+
+> 答辩/演示当天全栈重启（`docker compose down && up`）后也建议执行一次，避免演示时踩坑。
 
 ### 4.1 Elasticsearch 内存溢出 / 反复重启
 

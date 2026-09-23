@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 告警记录 Repository。
@@ -72,4 +73,10 @@ public interface AlarmRepository extends MongoRepository<Alarm, String> {
      * 按时间范围查询告警(报告聚合用, 按 createTime 倒序)。
      */
     List<Alarm> findByCreateTimeBetween(OffsetDateTime from, OffsetDateTime to);
+
+    /**
+     * 查询指定设备+类型的最新一条未处置告警(告警去重合并用, 见 AlarmService#createAlarm)。
+     */
+    Optional<Alarm> findTopByDeviceIdAndAlarmTypeAndStatusOrderByCreateTimeDesc(
+            String deviceId, String alarmType, String status);
 }

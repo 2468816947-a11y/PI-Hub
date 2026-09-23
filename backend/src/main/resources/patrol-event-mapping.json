@@ -1,0 +1,33 @@
+// =====================================================================
+// patrol-event 索引映射(与架构文档 §6.3 完全一致)
+// 后端启动时会显式创建; 也可手动执行(二选一):
+//   curl -X PUT "http://localhost:9200/patrol-event" \
+//        -H "Content-Type: application/json" \
+//        -d @patrol-event-mapping.json
+// (去掉本行注释后即为合法 JSON; 手动执行请先删除注释行)
+// 注意: description 使用 ik_max_word, 需要 ES 安装 IK 插件(见 Dockerfile.ik)
+// =====================================================================
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  },
+  "mappings": {
+    "properties": {
+      "eventId":     { "type": "keyword" },
+      "deviceId":    { "type": "keyword" },
+      "deviceType":  { "type": "keyword" },
+      "deviceName":  { "type": "keyword" },
+      "eventType":   { "type": "keyword" },
+      "alarmType":   { "type": "keyword" },
+      "alarmLevel":  { "type": "keyword" },
+      "taskId":      { "type": "keyword" },
+      "area":        { "type": "keyword" },
+      "temperature": { "type": "double" },
+      "threshold":   { "type": "double" },
+      "position":    { "type": "geo_point" },
+      "eventTime":   { "type": "date", "format": "yyyy-MM-dd'T'HH:mm:ssXXX" },
+      "description": { "type": "text", "analyzer": "ik_max_word" }
+    }
+  }
+}

@@ -117,8 +117,11 @@ public class PatrolEventDocument {
     /**
      * 事件发生时间(ISO8601)。
      * 文档字段: eventTime (date)
+     * <p>
+     * pattern 使用 strict_date_optional_time, 与 ES 默认 date 解析兼容,
+     * 支持毫秒精度("yyyy-MM-dd'T'HH:mm:ss.SSSXXX")。
      */
-    @Field(type = FieldType.Date, pattern = "yyyy-MM-dd'T'HH:mm:ssXXX")
+    @Field(type = FieldType.Date, pattern = "uuuu-MM-dd'T'HH:mm:ss[.SSS]XXX")
     private String eventTime;
 
     /**

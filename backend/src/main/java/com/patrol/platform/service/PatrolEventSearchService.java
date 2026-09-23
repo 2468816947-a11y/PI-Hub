@@ -84,29 +84,29 @@ public class PatrolEventSearchService {
             if (req.keyword() != null && !req.keyword().isEmpty()) {
                 b.must(m -> m.match(mq -> mq.field("description").query(req.keyword())));
             }
-            // term filter: 设备精确匹配
+            // term filter: 设备精确匹配 (用 .keyword 子字段, Spring Data ES 5.x 生成 multi-field)
             if (req.deviceId() != null && !req.deviceId().isEmpty()) {
-                b.filter(f -> f.term(t -> t.field("deviceId").value(req.deviceId())));
+                b.filter(f -> f.term(t -> t.field("deviceId.keyword").value(req.deviceId())));
             }
             // terms filter: 事件类型多选
             if (req.eventTypes() != null && !req.eventTypes().isEmpty()) {
                 b.filter(f -> f.terms(t -> t
-                        .field("eventType")
+                        .field("eventType.keyword")
                         .terms(tt -> tt.value(req.eventTypes().stream()
                                 .map(co.elastic.clients.elasticsearch._types.FieldValue::of)
                                 .toList()))));
             }
             // term filter: 告警类型
             if (req.alarmType() != null && !req.alarmType().isEmpty()) {
-                b.filter(f -> f.term(t -> t.field("alarmType").value(req.alarmType())));
+                b.filter(f -> f.term(t -> t.field("alarmType.keyword").value(req.alarmType())));
             }
             // term filter: 告警等级
             if (req.alarmLevel() != null && !req.alarmLevel().isEmpty()) {
-                b.filter(f -> f.term(t -> t.field("alarmLevel").value(req.alarmLevel())));
+                b.filter(f -> f.term(t -> t.field("alarmLevel.keyword").value(req.alarmLevel())));
             }
             // term filter: 区域(keyword 精确)
             if (req.area() != null && !req.area().isEmpty()) {
-                b.filter(f -> f.term(t -> t.field("area").value(req.area())));
+                b.filter(f -> f.term(t -> t.field("area.keyword").value(req.area())));
             }
             // 时间范围
             if (req.from() != null || req.to() != null) {
@@ -166,13 +166,13 @@ public class PatrolEventSearchService {
         data.put("totals", totals);
 
         // 2) alarmTypeDist: 按 alarmType terms
-        data.put("alarmTypeDist", termsAgg("alarmType", 100));
+        data.put("alarmTypeDist", termsAgg("alarmType.keyword", 100));
 
         // 3) deviceRank: 按 deviceId terms, top 10
-        data.put("deviceRank", termsAgg("deviceId", 10));
+        data.put("deviceRank", termsAgg("deviceId.keyword", 10));
 
         // 4) areaDist: 按 area terms
-        data.put("areaDist", termsAgg("area", 100));
+        data.put("areaDist", termsAgg("area.keyword", 100));
 
         // 5) timeTrend: 每小时聚合, 空桶补零
         data.put("timeTrend", timeTrend(from, to));

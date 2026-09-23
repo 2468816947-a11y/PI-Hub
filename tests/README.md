@@ -188,13 +188,23 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost/api/search/eve
   -d '{"geo":{"center":{"lng":116,"lat":39},"radiusKm":5},"bbox":{"topLeft":{"lng":116,"lat":40},"bottomRight":{"lng":117,"lat":38}}}'
 # 预期: 422
 
-# 006-06
-for i in $(seq 1 30); do
-  curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost/api/search/events \
-    -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-    -d '{"keyword":"test"}'
-done | sort | uniq -c
-# 预期: 200(主体) + 429(被限流的请求)
+# 006-06 注意: 必须真并发才能触发 429 —— 串行 30 次速率仅 ~10-15r/s,
+# 恰好落在 10r/s + burst20 的容量内, 不会出现 429(2026-09-23 实测)。
+# 使用 curl --parallel-immediate(需 curl ≥ 7.66)同时发起 30 个连接:
+curl -s -o /dev/null -w "%{http_code}\n" --parallel --parallel-immediate --parallel-max 30 \
+  -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"keyword":"test"}' \
+  $(for i in $(seq 1 30); do printf -- "--url http://localhost/api/search/events "; done) \
+  | sort | uniq -c
+# 预期: 200(主体) + 429(被限流的请求, 实测 30 发约 9 个 429)
+
+# 验证 429 响应带 Retry-After: 1(接口文档 §1.3)
+curl -s -o /dev/null -D - --parallel --parallel-immediate --parallel-max 30 \
+  -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"keyword":"test"}' \
+  $(for i in $(seq 1 30); do printf -- "--url http://localhost/api/search/events "; done) \
+  | grep -c "Retry-After: 1"
+# 预期: 30(所有响应含 429 均带 Retry-After 头)
 ```
 
 ---
@@ -300,9 +310,9 @@ docker exec kafka kafka-consumer-groups.sh --bootstrap-server kafka:9092 \
 | 🟡 需仿真器产生数据/状态 | 9 |
 | ⚠️ 文档缺口, 建议测试组补用例 | 4 |
 
-**文档缺口清单**(已合并到 `backend/README.md §6`):
-1. **LOGIN_LOCKED / LOGIN_EXPIRED 等细分错误码**: 当前统一 401。
-2. **429 限流响应头**: Nginx `limit_req` 触发后无 `Retry-After` 头, 客户端难以决定退避。
-3. **离线告警合并策略**: 每条 STATUS 都生成告警, 未对同一设备的同一未处置告警去重。
-4. **报告生成时间跨度上限**: 后端硬编码 30 天; 接口文档 §1.5 未列出。
+**文档缺口清单**(2026-09-23 已全部定案, 见 `backend/README.md §6`):
+1. **LOGIN_LOCKED / LOGIN_EXPIRED 等细分错误码**: ✅ 定案为统一 401 + `msg` 区分, 接口文档 §2.1.1 已补说明; 细分码留待用户管理扩展。
+2. **429 限流响应头**: ✅ Nginx `/api/search` 已加 `Retry-After: 1`, 接口文档 §1.3 已补; TC-006-06 验证时确认响应头。
+3. **离线告警合并策略**: ✅ 后端已实现同设备+同类型 NEW 告警合并刷新, 接口文档 §2.4 已补去重约定。
+4. **报告生成时间跨度上限**: ✅ 接口文档 §2.6 失败场景已明确 30 天上限返回 422。
 
