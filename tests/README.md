@@ -45,7 +45,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost/api/devices
 | TC-002-03 新增重名 | deviceId 重复 | 409 | ✅ | 见下 |
 | TC-002-04 设备类型非法 | deviceType="DRONE" | 422 | ✅ | 见下 |
 | TC-002-05 详情不存在 | GET /api/devices/X-XX | 404 | ✅ | 见下 |
-| TC-002-06 删除有进行中任务 | DELETE /api/devices/UAV-001 | 409 | 🟡 需先创建任务, 制造活跃任务 | 见下 |
+| TC-002-06 删除有进行中任务 | DELETE /api/devices/UAV-001 | 409 | ✅ 2026-09-23 实测: 建任务后立即删除返回 409(`设备存在未完成任务: T-…`) | 见下 |
 
 ```bash
 # 002-02
@@ -84,7 +84,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost/api/devices/NOT-EXIST 
 | 用例 | 输入 | 预期 | 状态 | 验证命令 |
 |---|---|---|---|---|
 | TC-003-01 创建任务(OFFLINE 设备) | devices 离线 | 409 | ✅ | 见下 |
-| TC-003-02 创建任务 + Kafka 下发 | ONLINE 设备 | 0, status=DISPATCHED | 🟡 验证需仿真器已上报心跳(ONLINE) | 见下 |
+| TC-003-02 创建任务 + Kafka 下发 | ONLINE 设备 | 0, status=DISPATCHED | ✅ 2026-09-23 实测: 指令经 patrol.task.command 下发, 仿真器执行后任务 FINISHED | 见下 |
 | TC-003-03 任务类型非法 | taskType="X" | 422 | ✅ | 见下 |
 | TC-003-04 设备数空 | deviceIds=[] | 422 | ✅ | 见下 |
 | TC-003-05 分页查询 | GET /api/tasks | 0, 倒序 | ✅ | 见下 |
@@ -118,7 +118,7 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost/api/tasks \
 |---|---|---|---|---|
 | TC-004-01 告警分页筛选 | GET /api/alarms?level= | 0 | ✅ | `curl ".../api/alarms?level=CRITICAL&page=1&size=20" -H "Bearer $TOKEN"` |
 | TC-004-02 告警详情不存在 | A-XXX | 404 | ✅ | 见下 |
-| TC-004-03 处置告警 | PUT /api/alarms/{id}/process | 0 | 🟡 需先有告警, 仿真器产生 TEMP_OVER / BATTERY_LOW | 见下 |
+| TC-004-03 处置告警 | PUT /api/alarms/{id}/process | 0 | ✅ 2026-09-23 实测: code=0, status=PROCESSED; 重复处置 409 | 见下 |
 | TC-004-04 重复处置 | 再 PUT 一次 | 409 | ✅ | 见下 |
 
 ```bash
@@ -174,11 +174,11 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost/api/files \
 
 | 用例 | 输入 | 预期 | 状态 | 验证命令 |
 |---|---|---|---|---|
-| TC-006-01 复合条件检索 | deviceId+from+to+keyword+geo | 0, list | 🟡 需 ES 有索引数据 | 见下 |
-| TC-006-02 geo_distance 命中 | 中心 5km 半径 | 0, 列表 | 🟡 需造数据 | 见下 |
-| TC-006-03 bbox 命中 | 矩形范围 | 0, 列表 | 🟡 需造数据 | 见下 |
+| TC-006-01 复合条件检索 | deviceId+from+to+keyword+geo | 0, list | ✅ 2026-09-23 实测: 5259 条事件, deviceId/alarmType/level/area 过滤均命中 | 见下 |
+| TC-006-02 geo_distance 命中 | 中心 5km 半径 | 0, 列表 | ✅ 2026-09-23 实测: 5km=5259 条, 0.5km=386 条(半径过滤生效) | 见下 |
+| TC-006-03 bbox 命中 | 矩形范围 | 0, 列表 | ✅ 2026-09-23 实测: ±0.1° 矩形命中 5259 条 | 见下 |
 | TC-006-04 geo + bbox 同传 | 两者均有 | 422 | ✅ | 见下 |
-| TC-006-05 关键字分词 | keyword 中文 | 0 | 🟡 需造数据 | — |
+| TC-006-05 关键字分词 | keyword 中文 | 0 | ✅ 2026-09-23 实测: "变压器" 命中 1714 条(ik_max_word) | — |
 | TC-006-06 限流 429 | 30 次/秒 | 出现 429 | ✅(经 Nginx `limit_req_zone`) | 见下 |
 
 ```bash
@@ -286,9 +286,9 @@ docker start backend-app-1
 
 | 用例 | 输入 | 预期 | 状态 |
 |---|---|---|---|
-| TC-010-01 10 设备并发上报 | 仿真器启 10 实例 | consumer lag 不持续积压 | 🟡 需仿真组配合 |
-| TC-010-02 ES 写入不报错 | 同上 | ES 健康 green, 无 mapping 错误 | 🟡 |
-| TC-010-03 Kafka 消费无丢消息 | msgId 幂等去重验证 | 通过 | 🟡 |
+| TC-010-01 10 设备并发上报 | 仿真器启 10 实例 | consumer lag 不持续积压 | ✅ 2026-09-23 实测: 全 topic/分区 LAG=0, 双实例消费均衡 |
+| TC-010-02 ES 写入不报错 | 同上 | ES 健康 green, 无 mapping 错误 | ✅ 2026-09-23 实测: 5259 条事件索引, 集群 green |
+| TC-010-03 Kafka 消费无丢消息 | msgId 幂等去重验证 | 通过 | ✅ 2026-09-23 实测: LAG=0 + msgId 去重日志正常 |
 
 > 性能测试建议脚本路径: `tests/perf/simulator-burst.sh`(待测试组补)
 > 当前阶段我们只能验证: 仿真器启动后, `MongoDB 集合有数据 + ES 索引非空 + Kafka consumer lag 接近 0`。
@@ -306,9 +306,29 @@ docker exec kafka kafka-consumer-groups.sh --bootstrap-server kafka:9092 \
 
 | 分类 | 数量 |
 |---|---|
-| ✅ 后端已实现, 冒烟可绿 | 24 |
-| 🟡 需仿真器产生数据/状态 | 9 |
-| ⚠️ 文档缺口, 建议测试组补用例 | 4 |
+| ✅ 已实现并通过验证 | 33 |
+| 🟡 需仿真器产生数据/状态 | 0(2026-09-23 全部验证通过) |
+| ⚠️ 文档缺口, 建议测试组补用例 | 0(4 项均已定案, 见下) |
+
+## 2026-09-23 全量验证记录(仿真器在跑 + 全栈容器 healthy)
+
+- **环境**: 10 设备全 ONLINE, 全栈 9 容器 healthy, 双实例轮询 5/5 交替
+- **TC-003**: 任务经 Kafka 指令下发, 仿真器执行后 DISPATCHED→FINISHED
+- **TC-004**: 处置 code=0 → PROCESSED; 重复处置 409
+- **TC-005**: 上传下载全链路 200, image/jpeg 20KB
+- **TC-006**: 事件 5259 条; deviceId/alarmType/level/area 过滤命中;
+  geo 5km=5259 / 0.5km=386(半径生效); bbox 命中; geo+bbox 同传 422;
+  关键字"变压器" 1714 条(ik_max_word)
+- **TC-007**: timeTrend 24 桶边缘补零; totals {devices:10, alarms:3269, events:5259};
+  alarmTypeDist 4 类 / deviceRank / areaDist 均有数据
+- **TC-010**: 全 topic/分区 LAG=0; 集群 green
+- **验证中发现并修复的问题**(详见 git log):
+  1. WebHDFS CREATE/MKDIRS 必须 PUT、路径逐段编码、OPEN 307 手动跟随
+  2. 双实例业务编号碰撞 → Mongo 原子序列 + 存量播种
+  3. ES 索引 position 为普通对象非 geo_point → 正确 mapping 重建 + reindex 数据无损迁移
+  4. 检索/聚合误用 `.keyword` 子字段(JSON mapping 无此子字段)→ 全部改为纯字段名
+  5. eventTime 秒级格式拒写纳秒 → mapping 改 strict_date_optional_time
+  6. 后端容器重建后 Nginx 502 → `nginx -s reload`(deploy/README §4.0)
 
 **文档缺口清单**(2026-09-23 已全部定案, 见 `backend/README.md §6`):
 1. **LOGIN_LOCKED / LOGIN_EXPIRED 等细分错误码**: ✅ 定案为统一 401 + `msg` 区分, 接口文档 §2.1.1 已补说明; 细分码留待用户管理扩展。
