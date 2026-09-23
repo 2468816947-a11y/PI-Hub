@@ -1,9 +1,9 @@
 package com.patrol.platform.controller;
 
 import com.patrol.platform.common.ApiResponse;
+import com.patrol.platform.dto.EventVO;
 import com.patrol.platform.dto.PageResponse;
 import com.patrol.platform.dto.SearchDto.EventSearchRequest;
-import com.patrol.platform.elasticsearch.PatrolEventDocument;
 import com.patrol.platform.repository.AlarmRepository;
 import com.patrol.platform.repository.DeviceRepository;
 import com.patrol.platform.service.PatrolEventSearchService;
@@ -38,8 +38,8 @@ public class SearchController {
      * 支持 deviceId/eventTypes/alarmType/alarmLevel/area/from/to/keyword/geo/bbox 任意组合(geo 与 bbox 互斥)。
      */
     @PostMapping("/events")
-    public ApiResponse<PageResponse<PatrolEventDocument>> searchEvents(@RequestBody EventSearchRequest req) {
-        Page<PatrolEventDocument> result = searchService.searchEvents(req);
+    public ApiResponse<PageResponse<EventVO>> searchEvents(@RequestBody EventSearchRequest req) {
+        Page<EventVO> result = searchService.searchEvents(req);
         return ApiResponse.ok(new PageResponse<>(
                 result.getTotalElements(),
                 result.getNumber() + 1,

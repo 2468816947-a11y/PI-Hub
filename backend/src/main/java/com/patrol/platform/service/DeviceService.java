@@ -40,6 +40,7 @@ public class DeviceService {
 
     private final DeviceRepository deviceRepository;
     private final PatrolTaskRepository patrolTaskRepository;
+    private final IdGenerator idGenerator;
 
     /**
      * 处理 REGISTER 消息(接口文档附录 A.2: REGISTER data = {name, model, area, lng, lat})。
@@ -196,7 +197,7 @@ public class DeviceService {
     public Device createDevice(String deviceId, String deviceType, String name, String model,
                                 String area, Device.Position position) {
         String finalId = (deviceId == null || deviceId.isEmpty())
-                ? IdGenerator.nextDeviceId(deviceType)
+                ? idGenerator.nextDeviceId(deviceType)
                 : deviceId;
 
         if (deviceRepository.existsByDeviceId(finalId)) {

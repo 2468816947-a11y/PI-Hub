@@ -43,6 +43,16 @@ public class PatrolEventIndexInitializer {
 
     @PostConstruct
     public void initIndex() {
+        ensureIndex();
+    }
+
+    /**
+     * 幂等确保 patrol-event 索引存在且 mapping 与 patrol-event-mapping.json 一致。
+     * <p>
+     * 供 AlarmService 等写 ES 的链路兜底调用(禁止用注解推导的 mapping 建索引:
+     * 注解映射曾把 position 建成普通对象而非 geo_point, 导致 geo 检索全部失败)。
+     */
+    public void ensureIndex() {
         String esUrl = esUris.replaceAll("/$", "");
         try {
             // 检查索引是否存在

@@ -42,6 +42,7 @@ public class HdfsFileService {
     private final HdfsClient hdfsClient;
     private final HdfsFileRepository hdfsFileRepository;
     private final DeviceService deviceService;
+    private final IdGenerator idGenerator;
 
     private static final DateTimeFormatter DATE_DIR = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
@@ -81,7 +82,7 @@ public class HdfsFileService {
         String area = device != null && device.getArea() != null ? device.getArea() : "unknown";
         String date = OffsetDateTime.now().format(DATE_DIR);
         String ext = inferExt(String.valueOf(msg.getData().getOrDefault("fileName", "")));
-        String fileId = IdGenerator.nextFileId();
+        String fileId = idGenerator.nextFileId();
         String fileName = String.valueOf(msg.getData().getOrDefault("fileName", fileId + ext));
         String hdfsPath = "/patrol/" + area + "/" + date + "/" + msg.getDeviceId() + "/" + fileId + ext;
 
@@ -153,7 +154,7 @@ public class HdfsFileService {
         Device device = deviceId != null ? deviceService.getDeviceOrNull(deviceId) : null;
         String area = device != null && device.getArea() != null ? device.getArea() : "unknown";
         String date = OffsetDateTime.now().format(DATE_DIR);
-        String fileId = IdGenerator.nextFileId();
+        String fileId = idGenerator.nextFileId();
         String hdfsPath = "/patrol/" + area + "/" + date + "/" +
                 (deviceId != null ? deviceId : "manual") + "/" + fileId + ext;
 

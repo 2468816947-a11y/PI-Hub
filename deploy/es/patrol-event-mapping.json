@@ -26,7 +26,7 @@
       "temperature": { "type": "double" },
       "threshold":   { "type": "double" },
       "position":    { "type": "geo_point" },
-      "eventTime":   { "type": "date", "format": "yyyy-MM-dd'T'HH:mm:ssXXX" },
+      "eventTime":   { "type": "date", "format": "strict_date_optional_time" },
       "description": { "type": "text", "analyzer": "ik_max_word" }
     }
   }

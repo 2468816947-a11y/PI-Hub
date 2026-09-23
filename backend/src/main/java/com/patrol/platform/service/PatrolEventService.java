@@ -33,6 +33,7 @@ public class PatrolEventService {
 
     private final ElasticsearchOperations elasticsearchOperations;
     private final DeviceRepository deviceRepository;
+    private final IdGenerator idGenerator;
 
     /**
      * 索引 IMAGE 事件。
@@ -41,7 +42,7 @@ public class PatrolEventService {
         if (msg.getData() == null) return;
         Device device = deviceRepository.findById(msg.getDeviceId()).orElse(null);
         PatrolEventDocument doc = PatrolEventDocument.builder()
-                .eventId(IdGenerator.nextEventId())
+                .eventId(idGenerator.nextEventId())
                 .deviceId(msg.getDeviceId())
                 .deviceType(msg.getDeviceType())
                 .deviceName(device != null ? device.getName() : null)
@@ -64,7 +65,7 @@ public class PatrolEventService {
         Double temperature = asDouble(msg.getData().get("temperature"));
         // THERMAL 消息 data 中通常不含 threshold; 此处如需展示可在阶段 4 由 AlarmService 反向回填
         PatrolEventDocument doc = PatrolEventDocument.builder()
-                .eventId(IdGenerator.nextEventId())
+                .eventId(idGenerator.nextEventId())
                 .deviceId(msg.getDeviceId())
                 .deviceType(msg.getDeviceType())
                 .deviceName(device != null ? device.getName() : null)
@@ -88,7 +89,7 @@ public class PatrolEventService {
         if (msg.getData() == null) return;
         Device device = deviceRepository.findById(msg.getDeviceId()).orElse(null);
         PatrolEventDocument doc = PatrolEventDocument.builder()
-                .eventId(IdGenerator.nextEventId())
+                .eventId(idGenerator.nextEventId())
                 .deviceId(msg.getDeviceId())
                 .deviceType(msg.getDeviceType())
                 .deviceName(device != null ? device.getName() : null)

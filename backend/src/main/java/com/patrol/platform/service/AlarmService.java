@@ -8,6 +8,7 @@ import com.patrol.platform.entity.Alarm;
 import com.patrol.platform.entity.Alarm.AlarmPosition;
 import com.patrol.platform.entity.Device;
 import com.patrol.platform.elasticsearch.PatrolEventDocument;
+import com.patrol.platform.elasticsearch.PatrolEventIndexInitializer;
 import com.patrol.platform.kafka.KafkaMessage;
 import com.patrol.platform.repository.AlarmRepository;
 import com.patrol.platform.repository.DeviceRepository;
@@ -16,8 +17,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.IndexOperations;
 import org.springframework.data.elasticsearch.core.geo.GeoPoint;
+import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.IndexQuery;
 import org.springframework.data.elasticsearch.core.query.IndexQueryBuilder;
 import org.springframework.stereotype.Service;
@@ -46,6 +47,8 @@ public class AlarmService {
     private final AlarmRepository alarmRepository;
     private final DeviceRepository deviceRepository;
     private final ElasticsearchOperations elasticsearchOperations;
+    private final IdGenerator idGenerator;
+    private final PatrolEventIndexInitializer esIndexInitializer;
 
     /**
      * 处理 STATUS 消息中的电量与故障判定。
@@ -189,7 +192,7 @@ public class AlarmService {
                 : null;
 
         Alarm alarm = Alarm.builder()
-                .alarmId(IdGenerator.nextAlarmId())
+                .alarmId(idGenerator.nextAlarmId())
                 .deviceId(deviceId)
                 .taskId(taskId)
                 .alarmType(alarmType)
@@ -234,13 +237,11 @@ public class AlarmService {
                     .description(alarm.getDescription())
                     .build();
 
-            IndexOperations indexOps = elasticsearchOperations.indexOps(PatrolEventDocument.class);
-            if (!indexOps.exists()) {
-                indexOps.create();
-                indexOps.putMapping(indexOps.createMapping(PatrolEventDocument.class));
-            }
+            // 索引不存在时用 classpath 的 patrol-event-mapping.json 创建
+            // (注解推导映射会把 position 建成普通对象, geo 检索会失败, 禁止再走那条路)
+            esIndexInitializer.ensureIndex();
             IndexQuery query = new IndexQueryBuilder().withId(doc.getEventId()).withObject(doc).build();
-            elasticsearchOperations.index(query, indexOps.getIndexCoordinates());
+            elasticsearchOperations.index(query, IndexCoordinates.of("patrol-event"));
         } catch (Exception e) {
             // ES 写入失败不应影响主流程(Mongo 已落库)
             log.error("Failed to index alarm event to ES: alarmId={}", alarm.getAlarmId(), e);

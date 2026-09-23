@@ -44,6 +44,7 @@ public class TaskService {
     private final PatrolTaskRepository patrolTaskRepository;
     private final DeviceRepository deviceRepository;
     private final TaskCommandProducer taskCommandProducer;
+    private final IdGenerator idGenerator;
 
     /** 任务运行时上下文缓存: taskId → 任务信息(含 tempThreshold 等参数) */
     private final Map<String, TaskContext> taskContextCache = new ConcurrentHashMap<>();
@@ -186,7 +187,7 @@ public class TaskService {
         }
 
         // 3. 写 Mongo(DISPATCHED 状态, 同步动作)
-        String taskId = IdGenerator.nextTaskId();
+        String taskId = idGenerator.nextTaskId();
         OffsetDateTime now = OffsetDateTime.now();
         PatrolTask task = PatrolTask.builder()
                 .taskId(taskId)

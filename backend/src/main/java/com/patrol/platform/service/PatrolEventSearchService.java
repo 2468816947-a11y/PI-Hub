@@ -6,6 +6,7 @@ import co.elastic.clients.elasticsearch._types.SortOrder;
 import co.elastic.clients.elasticsearch._types.aggregations.Aggregation;
 import co.elastic.clients.elasticsearch._types.aggregations.CalendarInterval;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import com.patrol.platform.dto.EventVO;
 import com.patrol.platform.dto.SearchDto.Bbox;
 import com.patrol.platform.dto.SearchDto.EventSearchRequest;
 import com.patrol.platform.dto.SearchDto.Geo;
@@ -56,8 +57,11 @@ public class PatrolEventSearchService {
 
     /**
      * 检索巡检事件(分页)。
+     * <p>
+     * 响应映射为 {@link com.patrol.platform.dto.EventVO}: ES 内部 position 为
+     * geo_point {lat, lon}, 对外按接口文档 §1.5 转回 {lng, lat}。
      */
-    public org.springframework.data.domain.Page<PatrolEventDocument> searchEvents(EventSearchRequest req) {
+    public org.springframework.data.domain.Page<EventVO> searchEvents(EventSearchRequest req) {
         int page = req.page() == null || req.page() < 1 ? 0 : req.page() - 1;
         int size = req.size() == null || req.size() < 1 ? 20 : Math.min(req.size(), 100);
 
@@ -68,11 +72,43 @@ public class PatrolEventSearchService {
 
         SearchHits<PatrolEventDocument> hits = elasticsearchOperations.search(qb.build(), PatrolEventDocument.class);
 
-        List<PatrolEventDocument> content = new ArrayList<>();
-        hits.forEach(h -> content.add(h.getContent()));
+        List<EventVO> content = new ArrayList<>();
+        for (SearchHit<PatrolEventDocument> hit : hits) {
+            content.add(toEventVO(hit.getContent()));
+        }
         long total = hits.getTotalHits();
 
         return new org.springframework.data.domain.PageImpl<>(content, PageRequest.of(page, size), total);
+    }
+
+    /**
+     * ES 文档 → 对外响应对象(position 从 {lat, lon} 转为 {lng, lat})。
+     */
+    private EventVO toEventVO(PatrolEventDocument doc) {
+        EventVO.Position pos = null;
+        if (doc.getPosition() != null) {
+            // GeoPoint.getLon()/getLat() 为原始 double; 仅坐标非 (0,0) 时输出
+            double lon = doc.getPosition().getLon();
+            double lat = doc.getPosition().getLat();
+            if (lon != 0 || lat != 0) {
+                pos = new EventVO.Position(lon, lat);
+            }
+        }
+        return new EventVO(
+                doc.getEventId(),
+                doc.getDeviceId(),
+                doc.getDeviceType(),
+                doc.getDeviceName(),
+                doc.getEventType(),
+                doc.getAlarmType(),
+                doc.getAlarmLevel(),
+                doc.getTaskId(),
+                doc.getArea(),
+                doc.getTemperature(),
+                doc.getThreshold(),
+                pos,
+                doc.getEventTime(),
+                doc.getDescription());
     }
 
     /**
@@ -84,29 +120,29 @@ public class PatrolEventSearchService {
             if (req.keyword() != null && !req.keyword().isEmpty()) {
                 b.must(m -> m.match(mq -> mq.field("description").query(req.keyword())));
             }
-            // term filter: 设备精确匹配 (用 .keyword 子字段, Spring Data ES 5.x 生成 multi-field)
+            // term filter: 设备精确匹配 (mapping 中字段本身即 keyword, 无 .keyword 子字段)
             if (req.deviceId() != null && !req.deviceId().isEmpty()) {
-                b.filter(f -> f.term(t -> t.field("deviceId.keyword").value(req.deviceId())));
+                b.filter(f -> f.term(t -> t.field("deviceId").value(req.deviceId())));
             }
             // terms filter: 事件类型多选
             if (req.eventTypes() != null && !req.eventTypes().isEmpty()) {
                 b.filter(f -> f.terms(t -> t
-                        .field("eventType.keyword")
+                        .field("eventType")
                         .terms(tt -> tt.value(req.eventTypes().stream()
                                 .map(co.elastic.clients.elasticsearch._types.FieldValue::of)
                                 .toList()))));
             }
             // term filter: 告警类型
             if (req.alarmType() != null && !req.alarmType().isEmpty()) {
-                b.filter(f -> f.term(t -> t.field("alarmType.keyword").value(req.alarmType())));
+                b.filter(f -> f.term(t -> t.field("alarmType").value(req.alarmType())));
             }
             // term filter: 告警等级
             if (req.alarmLevel() != null && !req.alarmLevel().isEmpty()) {
-                b.filter(f -> f.term(t -> t.field("alarmLevel.keyword").value(req.alarmLevel())));
+                b.filter(f -> f.term(t -> t.field("alarmLevel").value(req.alarmLevel())));
             }
             // term filter: 区域(keyword 精确)
             if (req.area() != null && !req.area().isEmpty()) {
-                b.filter(f -> f.term(t -> t.field("area.keyword").value(req.area())));
+                b.filter(f -> f.term(t -> t.field("area").value(req.area())));
             }
             // 时间范围
             if (req.from() != null || req.to() != null) {
@@ -166,13 +202,13 @@ public class PatrolEventSearchService {
         data.put("totals", totals);
 
         // 2) alarmTypeDist: 按 alarmType terms
-        data.put("alarmTypeDist", termsAgg("alarmType.keyword", 100));
+        data.put("alarmTypeDist", termsAgg("alarmType", 100));
 
         // 3) deviceRank: 按 deviceId terms, top 10
-        data.put("deviceRank", termsAgg("deviceId.keyword", 10));
+        data.put("deviceRank", termsAgg("deviceId", 10));
 
         // 4) areaDist: 按 area terms
-        data.put("areaDist", termsAgg("area.keyword", 100));
+        data.put("areaDist", termsAgg("area", 100));
 
         // 5) timeTrend: 每小时聚合, 空桶补零
         data.put("timeTrend", timeTrend(from, to));
